@@ -15,7 +15,7 @@
 	}
 
 	$(function() {
-		var socket = io.connect('http://localhost');
+		var socket = io.connect();
 		$(document).keydown(function(event){
 			var dx = 0, dy = 0;
 			switch (event.keyCode) {
