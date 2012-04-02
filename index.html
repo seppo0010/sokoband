@@ -2,6 +2,7 @@
 <html>
 <head>
 	<script type="text/javascript" src="jquery-1.7.2.min.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
 	<script type="text/javascript">
 	var TILE = {
 		NOTHING: 0,
@@ -12,82 +13,9 @@
 		PLAYER: 18,
 		SIZE: 40,
 	}
-	var map = [
-		[TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL , ],
-		[TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.WALL , ],
-		[TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.BOX  , TILE.FLOOR, TILE.FLOOR, TILE.WALL , ],
-		[TILE.NOTHING, TILE.NOTHING, TILE.WALL   , TILE.WALL   , TILE.WALL , TILE.FLOOR, TILE.FLOOR, TILE.BOX  , TILE.WALL , TILE.WALL , ],
-		[TILE.NOTHING, TILE.NOTHING, TILE.WALL   , TILE.FLOOR  , TILE.FLOOR, TILE.BOX  , TILE.FLOOR, TILE.BOX  , TILE.FLOOR, TILE.WALL , ],
-		[TILE.WALL   , TILE.WALL   , TILE.WALL   , TILE.FLOOR  , TILE.WALL , TILE.FLOOR, TILE.WALL , TILE.WALL , TILE.FLOOR, TILE.WALL , TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL  , TILE.WALL  , TILE.WALL],
-		[TILE.WALL   , TILE.FLOOR  , TILE.FLOOR  , TILE.FLOOR  , TILE.WALL , TILE.FLOOR, TILE.WALL , TILE.WALL , TILE.FLOOR, TILE.WALL , TILE.WALL   , TILE.WALL   , TILE.WALL   , TILE.WALL , TILE.FLOOR, TILE.FLOOR, TILE.TARGET, TILE.TARGET, TILE.WALL],
-		[TILE.WALL   , TILE.FLOOR  , TILE.BOX    , TILE.FLOOR  , TILE.FLOOR, TILE.BOX  , TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.FLOOR  , TILE.FLOOR  , TILE.FLOOR  , TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.TARGET, TILE.TARGET, TILE.WALL],
-		[TILE.WALL   , TILE.WALL   , TILE.WALL   , TILE.WALL   , TILE.WALL , TILE.FLOOR, TILE.WALL , TILE.WALL , TILE.WALL , TILE.FLOOR, TILE.WALL   , TILE.PLAYER , TILE.WALL   , TILE.WALL , TILE.FLOOR, TILE.FLOOR, TILE.TARGET, TILE.TARGET, TILE.WALL],
-		[TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.FLOOR, TILE.WALL   , TILE.WALL   , TILE.WALL   , TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL  , TILE.WALL  , TILE.WALL],
-		[TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.NOTHING, TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL , TILE.WALL, ],
-	];
-
-	var boxes = [];
-	var player = {
-		isValidMove: function(dx, dy) {
-			if (map[this.y+dy][this.x+dx] == TILE.NOTHING || map[this.y+dy][this.x+dx] == TILE.WALL) {
-				return false;
-			}
-			var c = boxes.length;
-			var hasBox = false, hasSecondBox = false;
-			for (var i = 0; i < c; i++) {
-				if (hasBox == false && boxes[i].x == this.x+dx && boxes[i].y == this.y+dy) {
-					if ((map[this.y+dy*2][this.x+dx*2] & TILE.FLOOR) != TILE.FLOOR) {
-						return false;
-					}
-					hasBox = true;
-				}
-				if (boxes[i].x == this.x+dx*2 && boxes[i].y == this.y+dy*2) {
-					hasSecondBox = true;
-				}
-			}
-			if (hasBox && hasSecondBox) return false;
-			return true;
-		},
-		move: function(dx, dy) {
-			if (!this.isValidMove(dx, dy)) return;
-			var won = false;
-			var c = boxes.length;
-			for (var i = 0; i < c; i++) {
-				var box = boxes[i];
-				if (box.x == this.x+dx && box.y == this.y+dy) {
-					box.x += dx;
-					box.y += dy;
-					box.obj.css('top', (box.y * TILE.SIZE) + 'px');
-					box.obj.css('left', (box.x * TILE.SIZE) + 'px');
-					box.obj.parent().append(box.obj);
-					won = true;
-					for (i = 0; i < c; i++) {
-						box = boxes[i];
-						if (map[box.y][box.x] != TILE.TARGET) {
-							won = false;
-							break;
-						}
-					}
-					break;
-				}
-			}
-			this.x += dx; this.y += dy;
-			this.obj.css('top', (this.y * TILE.SIZE) + 'px');
-			this.obj.css('left', (this.x * TILE.SIZE) + 'px');
-			if (dx < 0) {
-				this.obj.addClass('flip');
-			}
-			if (dx > 0) {
-				this.obj.removeClass('flip');
-			}
-			this.obj.parent().append(this.obj);
-			if (won) {
-				alert('Game Over');
-			}
-		}
-	}
 
 	$(function() {
+		var socket = io.connect('http://localhost');
 		$(document).keydown(function(event){
 			var dx = 0, dy = 0;
 			switch (event.keyCode) {
@@ -96,62 +24,77 @@
 				case 39: dx = 1; break;
 				case 40: dy = 1; break;
 			}
-			player.move(dx, dy);
+			socket.emit('move', [dx, dy])
 		});
-		var game = $('#game');
-		var addFloor = function(i, j) {
-			var obj = $('<img />');
-			obj.attr('src','floor.png');
-			obj.css('top', (i * TILE.SIZE) + 'px');
-			obj.css('left', (j * TILE.SIZE) + 'px');
-			game.append(obj);
-		}
-		var c = map.length, d;
-		for (var i = 0; i < c; i++) {
-			d = map[i].length;
-			for (var j = 0; j < d; j++) {
-				if (map[i][j] == TILE.NOTHING) continue;
-				if ((map[i][j] & TILE.FLOOR) == TILE.FLOOR) {
-					addFloor(i, j);
+		socket.on('players', function (players) {
+			var c = players.length;
+			var unused = [1,2,3,4]
+			for (var i = 0; i < c; i++) {
+				var guy = (1 + (players[i].id % 4));
+				delete unused[unused.indexOf(guy)];
+				var obj = $('#player' + guy);
+				if (obj.length == 0) {
+					obj = $('<img id="player' + guy + '" />');
+					obj.attr('src', 'guy' + guy + '.png');
+					$('#game').append(obj);
 				}
-				if ((map[i][j] & TILE.WALL) == TILE.WALL) {
-					var obj = $('<img />');
-					obj.attr('src','wall.png');
-					obj.css('top', (i * TILE.SIZE) + 'px');
-					obj.css('left', (j * TILE.SIZE) + 'px');
-					game.append(obj);
+				obj.css('top', (players[i].y * TILE.SIZE) + 'px');
+				obj.css('left', (players[i].x * TILE.SIZE) + 'px');
+			}
+			for (var i = 0; i < unused.length; i++) {
+				$('#player' + unused[i]).remove();
+			}
+		});
+		socket.on('won', function (boxes) {
+			alert('Congratulations. You won!');
+		});
+		socket.on('boxes', function (boxes) {
+			var c = boxes.length;
+			for (var i = 0; i < c; i++) {
+				var obj = $('#box' + i);
+				if (obj.length == 0) {
+					obj = $('<img id="box' + i + '" />');
+					obj.attr('src', 'box.png');
+					$('#game').append(obj);
 				}
-				if ((map[i][j] & TILE.BOX) == TILE.BOX) {
-					var obj = $('<img />');
-					obj.attr('src','box.png');
-					obj.css('top', (i * TILE.SIZE) + 'px');
-					obj.css('left', (j * TILE.SIZE) + 'px');
-					game.append(obj);
-					boxes.push({
-						x: j,
-						y: i,
-						obj: obj
-					});
-				}
-				if ((map[i][j] & TILE.PLAYER) == TILE.PLAYER) {
-					var obj = $('<img />');
-					player.obj = obj;
-					player.x = j;
-					player.y = i;
-					obj.attr('src','guy1.png');
-					obj.css('top', (i * TILE.SIZE) + 'px');
-					obj.css('left', (j * TILE.SIZE) + 'px');
-					game.append(obj);
-				}
-				if ((map[i][j] & TILE.TARGET) == TILE.TARGET) {
-					var obj = $('<img />');
-					obj.attr('src','target.png');
-					obj.css('top', (i * TILE.SIZE) + 'px');
-					obj.css('left', (j * TILE.SIZE) + 'px');
-					game.append(obj);
+				obj.css('top', (boxes[i].y * TILE.SIZE) + 'px');
+				obj.css('left', (boxes[i].x * TILE.SIZE) + 'px');
+			}
+		});
+		socket.on('map', function (map) {
+			var game = $('#game');
+			var addFloor = function(i, j) {
+				var obj = $('<img />');
+				obj.attr('src','floor.png');
+				obj.css('top', (i * TILE.SIZE) + 'px');
+				obj.css('left', (j * TILE.SIZE) + 'px');
+				game.append(obj);
+			}
+			var c = map.length, d;
+			for (var i = 0; i < c; i++) {
+				d = map[i].length;
+				for (var j = 0; j < d; j++) {
+					if (map[i][j] == TILE.NOTHING) continue;
+					if ((map[i][j] & TILE.FLOOR) == TILE.FLOOR) {
+						addFloor(i, j);
+					}
+					if ((map[i][j] & TILE.WALL) == TILE.WALL) {
+						var obj = $('<img />');
+						obj.attr('src','wall.png');
+						obj.css('top', (i * TILE.SIZE) + 'px');
+						obj.css('left', (j * TILE.SIZE) + 'px');
+						game.append(obj);
+					}
+					if ((map[i][j] & TILE.TARGET) == TILE.TARGET) {
+						var obj = $('<img />');
+						obj.attr('src','target.png');
+						obj.css('top', (i * TILE.SIZE) + 'px');
+						obj.css('left', (j * TILE.SIZE) + 'px');
+						game.append(obj);
+					}
 				}
 			}
-		}
+		});
 	});
 	</script>
 	<style type="text/css">
