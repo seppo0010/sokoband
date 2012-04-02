@@ -150,7 +150,7 @@ var server = http.createServer(function(req, res) {
 });
 
 io = io.listen(server);
-server.listen(8081);
+server.listen(process.env.PORT || 8081);
 
 io.sockets.on('connection', function (socket) {
 	socket.on('disconnect', function () {
