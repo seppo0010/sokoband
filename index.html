@@ -45,6 +45,13 @@
 				$('#player' + unused[i]).remove();
 			}
 		});
+		socket.on('playerid', function (id) {
+			if (id == -1) {
+				$('#youare').html('Waiting...');
+			} else {
+				$('#youare').html('You are:<br /><img src="guy' + (1 + id % 4) + '.png" />');
+			}
+		});
 		socket.on('won', function (boxes) {
 			alert('Congratulations. You won!');
 		});
@@ -98,6 +105,7 @@
 	});
 	</script>
 	<style type="text/css">
+	#youare { position: fixed; top: 0; left: 0; }
 	#game { position: relative; width: 760px; margin: 0 auto; }
 	#game img { position: absolute; }
 	#game img.flip {
@@ -111,6 +119,7 @@
 	</style>
 </head>
 <body>
+	<div id="youare"></div>
 	<div id="game"></div>
 </body>
 </html>

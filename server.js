@@ -44,6 +44,7 @@ var map = [
 
 var boxes = [];
 var players = [];
+var queue = [];
 players.serialize = function() {
 	var _players = [];
 	var c = this.length;
@@ -55,6 +56,17 @@ players.serialize = function() {
 		};
 	}
 	return _players;
+}
+
+var broadcast = function (event, param) {
+	var i, c = players.length;
+	for (i = 0; i < c; i++) {
+		players[i].socket.emit(event, param);
+	}
+	c = queue.length;
+	for (i = 0; i < c; i++) {
+		queue[i].emit(event, param);
+	}
 }
 var Player = function() {}
 Player.prototype = {
@@ -105,18 +117,13 @@ Player.prototype = {
 						break;
 					}
 				}
-				for (var i = 0; i < players.length; i++) {
-					players[i].socket.emit('boxes', boxes);
-				}
+				broadcast('boxes', boxes);
 				break;
 			}
 		}
 		this.x += dx; this.y += dy;
 		if (won) {
-			var c = players.length;
-			for (var i = 0; i < c; i++) {
-				players[i].socket.emit('won');
-			}
+			broadcast('won');
 		}
 		return true;
 	}
@@ -150,9 +157,18 @@ io.sockets.on('connection', function (socket) {
 		var c = players.length;
 		for (var i = 0; i < c; i++) {
 			if (players[i].socket == socket) {
-				players.splice(i, 1);
+				if (queue.length > 0) {
+					players[i].socket = queue[0];
+					queue[0].emit('playerid', players[i].id);
+					queue.splice(0, 1);
+				} else {
+					players.splice(i, 1);
+				}
 				break;
 			}
+		}
+		if (queue.indexOf(socket) != -1) {
+			queue.splice(queue.indexOf(socket), 1);
 		}
 	});
 	socket.on('move', function(d) {
@@ -166,37 +182,43 @@ io.sockets.on('connection', function (socket) {
 			}
 		}
 		if (ok)
-			for (var i = 0; i < c; i++) {
-				players[i].socket.emit('players', players.serialize());
-			}
+			broadcast('players', players.serialize());
 	});
-	var player = new Player();
-	player.socket = socket;
-	if (players.length > 0)
-		player.id = players[players.length-1].id + 1;
-	else
-		player.id = 1;
+	if (players.length == 4) {
+		queue.push(socket);
+		socket.emit('playerid', -1);
+	} else {
+		var player = new Player();
+		player.socket = socket;
+		if (players.length > 0)
+			player.id = players[players.length-1].id + 1;
+		else
+			player.id = 1;
 
-	var target;
-	switch (player.id % 4) {
-		case 0: target = TILE.PLAYER1; break;
-		case 1: target = TILE.PLAYER2; break;
-		case 2: target = TILE.PLAYER3; break;
-		case 3: target = TILE.PLAYER4; break;
-	}
-	var c = map.length;
-	for (var i = 0; i < c; i++) {
-		var d = map[i].length;
-		for (var j = 0; j < d; j++) {
-			if (map[i][j] == target) {
-				player.x = j;
-				player.y = i;
-				i = c;
-				break;
+		socket.emit('playerid', player.id);
+
+		var target;
+		switch (player.id % 4) {
+			case 0: target = TILE.PLAYER1; break;
+			case 1: target = TILE.PLAYER2; break;
+			case 2: target = TILE.PLAYER3; break;
+			case 3: target = TILE.PLAYER4; break;
+		}
+		var c = map.length;
+		for (var i = 0; i < c; i++) {
+			var d = map[i].length;
+			for (var j = 0; j < d; j++) {
+				if (map[i][j] == target) {
+					player.x = j;
+					player.y = i;
+					i = c;
+					break;
+				}
 			}
 		}
+		players.push(player);
 	}
-	players.push(player);
+
 	if (boxes.length == 0) {
 		var c = map.length;
 		for (var i = 0; i < c; i++) {
@@ -215,8 +237,6 @@ io.sockets.on('connection', function (socket) {
 	socket.emit('map', map);
 	socket.emit('boxes', boxes);
 	var c = players.length;
-	for (var i = 0; i < c; i++) {
-		players[i].socket.emit('players', players.serialize());
-	}
+	broadcast('players', players.serialize());
 });
 
